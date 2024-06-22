@@ -42,7 +42,45 @@ local setColor = function(win, buf, colors)
     end
 end
 
-ColorPicker = function()
+local startPreview = function(win, colors)
+    local timer = vim.uv.new_timer()
+    local prevColor = ''
+    
+    local file = io.open(optsPath, 'r')
+    local opts = {}
+    
+    if file then
+        for i in file:lines() do
+            table.insert(opts, i)
+        end
+        file:close()
+    end
+    
+    local initialColor = opts[1]
+
+    timer:start(0, 250, vim.schedule_wrap(function()
+        if pickState == 1 then
+            timer:close()
+            return
+        end
+        
+        -- reset to initial color if user exits before selecting
+        if not vim.api.nvim_win_is_valid(win) then
+            vim.cmd(string.format('colorscheme %s', initialColor))
+            timer:close()
+            return
+        end
+        -- 
+
+        local cursor = vim.api.nvim_win_get_cursor(win)
+        if not (prevColor == colors[cursor[1]]) then
+            prevColor = colors[cursor[1]]
+            vim.cmd(string.format('colorscheme %s', colors[cursor[1]]))
+        end
+    end))
+end
+
+local ColorPicker = function()
     local ui = vim.api.nvim_list_uis()[1]
     pickState = 0
 
@@ -58,7 +96,7 @@ ColorPicker = function()
     }
 
     local buf = vim.api.nvim_create_buf(false, true)
-    local win = vim.api.nvim_open_win(buf, 1, opts)
+    local win = vim.api.nvim_open_win(buf, true, opts)
 
     local color_files = vim.api.nvim_get_runtime_file('colors/*.vim', true)
     local lua_color_files = vim.api.nvim_get_runtime_file('colors/*.lua', true)
@@ -81,7 +119,9 @@ ColorPicker = function()
     end
 
     vim.api.nvim_buf_set_lines(buf, 0, #colors + 1, false, colors)
-    vim.api.nvim_buf_set_keymap(buf, 'n', '<C-s>', '', { callback = setColor(win, buf, colors) }) -- didn't work when I was using arch, worked fine on windows 10
+    startPreview(win, colors)
+
+    vim.api.nvim_buf_set_keymap(buf, 'n', '<C-s>', '', { callback = setColor(win, buf, colors) })
 end
 
 vim.keymap.set('n', '<C-c>', ColorPicker, {})
